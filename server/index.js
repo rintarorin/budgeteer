@@ -59,6 +59,48 @@ app.get('/api/summary', (req, res) => {
   });
 });
 
+// Get monthly summary (totals by category for a given month)
+app.get('/api/monthly/:yearMonth', (req, res) => {
+  const { yearMonth } = req.params; // format: "2026-06"
+  
+  const transactions = db.prepare(
+    "SELECT * FROM transactions WHERE date LIKE ? ORDER BY date DESC"
+  ).all(`${yearMonth}%`);
+
+  const income = transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const expenses = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const byCategory = {};
+  transactions
+    .filter(t => t.type === 'expense')
+    .forEach(t => {
+      byCategory[t.category] = (byCategory[t.category] || 0) + t.amount;
+    });
+
+  const categoryBreakdown = Object.entries(byCategory).map(([name, value]) => ({ name, value }));
+
+  res.json({
+    income,
+    expenses,
+    balance: income - expenses,
+    transactions,
+    categoryBreakdown,
+  });
+});
+
+// Get list of months that have transactions (for the dropdown)
+app.get('/api/months', (req, res) => {
+  const rows = db.prepare(
+    "SELECT DISTINCT substr(date, 1, 7) as month FROM transactions ORDER BY month DESC"
+  ).all();
+  res.json(rows.map(r => r.month));
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });
